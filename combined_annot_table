@@ -1,0 +1,133 @@
+#!/usr/bin/env python
+'''Merges annotations from mouse, dog and human and creates a table.'''
+
+import sys
+import csv
+from collections import defaultdict, namedtuple
+
+Match = namedtuple('Match', ['geneid', 'desc'])
+
+def load_annot(csvfile):
+    '''Return sets of transcript IDs with homologs and orthologs'''
+
+    homologs = defaultdict(str)
+    orthologs = defaultdict(str)
+    allseqs = set()
+    with open(csvfile) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if row['ortholog']:
+                geneinfo = row['ortholog'].split('|')
+                match = Match(geneinfo[-2], geneinfo[0])
+                orthologs[row['sequence name']] = match
+
+            elif row['homolog']:
+                geneinfo = row['homolog'].split('|')
+                match = Match(geneinfo[-2], geneinfo[0])
+                homologs[row['sequence name']] = match
+
+            allseqs.add(row['sequence name'])
+
+    return orthologs, homologs, allseqs
+
+
+def load_dog_annot(csvfile):
+    '''Return sets of transcript IDs with dog homologs and orthologs'''
+
+    homologs = defaultdict(str)
+    orthologs = defaultdict(str)
+    allseqs = set()
+    with open(csvfile) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if row['ortholog']:
+                geneid = row['ortholog'].split()[2].split(':')[1]
+                orthologs[row['sequence name']] = geneid
+
+            elif row['homolog']:
+                geneid = row['homolog'].split()[2].split(':')[1]
+                homologs[row['sequence name']] = geneid
+
+            allseqs.add(row['sequence name'])
+
+    return orthologs, homologs, allseqs
+
+
+def print_table(dogdb, musdb, homodb, homo_all, output):
+    for seqname in homo_all:
+        dog = dogdb[seqname]
+        if dog == '': dog = 'N/A'
+        if musdb[seqname] != '':
+            mus = musdb[seqname].geneid
+        else:
+            mus = 'N/A'
+
+        if homodb[seqname] != '':
+            human = homodb[seqname].geneid
+        else:
+            human = 'N/A'
+
+        if (human == 'N/A' and mus == 'N/A'
+                and dog == 'N/A'):
+            continue
+        else:
+            print >> output, '%s,%s,%s,%s' % (seqname, mus, human, dog)
+
+def print_table_sep(annotdb, allseqs, output):
+    for seqname in allseqs:
+        if annotdb[seqname] != '':
+            annot = annotdb[seqname].geneid
+        else:
+            annot = 'N/A'
+
+        if (annot == 'N/A'):
+            continue
+        else:
+            print >> output, '%s,%s' % (seqname, annot)
+
+def print_table_dog(annotdb, allseqs, output):
+    for seqname in allseqs:
+        annot = annotdb[seqname]
+        if annot == '':
+            annot = 'N/A'
+        if annot != 'N/A':
+            print >> output, '%s,%s' % (seqname, annot)
+
+
+def main():
+    '''Main function'''
+
+    print >> sys.stderr, 'loading annots from mouse...'
+    mus_ortho, mus_homo, mus_all = \
+            load_annot('trinity-mirounga.mouse.renamed.fa.annot.csv')
+    print >> sys.stderr, len(mus_ortho), len(mus_homo)
+
+    print >> sys.stderr, 'loading annots from human...'
+    homo_ortho, homo_homo, homo_all = \
+            load_annot('trinity-mirounga.renamed.fa.human.annot.csv')
+    print >> sys.stderr, len(homo_ortho), len(homo_homo)
+    # op = open('human_orthologs.csv', 'w')
+    # print_table_sep(homo_ortho, homo_all, op)
+    # op.close()
+
+    # op = open('human_homologs.csv', 'w')
+    # print_table_sep(homo_homo, homo_all, op)
+    # op.close()
+
+    print >> sys.stderr, 'loading annots from dog...'
+    dog_ortho, dog_homo, dog_all = \
+            load_dog_annot('mirounga-dog.fa.annot.csv')
+    print >> sys.stderr, len(dog_ortho), len(dog_homo)
+
+    op = open('combined_orthologs.csv', 'w')
+    print_table(dog_ortho, mus_ortho, homo_ortho, homo_all, op)
+    op.close()
+
+    op = open('combined_homologs.csv', 'w')
+    print_table(dog_homo, mus_homo, homo_homo, homo_all, op)
+    op.close()
+
+
+if __name__=='__main__':
+    main()
+
